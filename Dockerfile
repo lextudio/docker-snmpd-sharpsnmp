@@ -1,5 +1,5 @@
 # Stage 1: Build the application
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 WORKDIR /source
 
 # Copy the source code into the container
@@ -15,7 +15,7 @@ RUN dotnet restore
 RUN dotnet publish -c Release -o /app/publish
 
 # Stage 2: Create the runtime image
-FROM mcr.microsoft.com/dotnet/runtime:8.0 AS runtime
+FROM mcr.microsoft.com/dotnet/runtime:9.0 AS runtime
 WORKDIR /app
 
 # Copy the build artifacts from the previous stage
