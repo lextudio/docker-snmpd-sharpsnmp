@@ -1,0 +1,3 @@
+[submodule "sharpsnmplib-samples"]
+	path = sharpsnmplib-samples
+	url = https://github.com/lextudio/sharpsnmplib-samples
