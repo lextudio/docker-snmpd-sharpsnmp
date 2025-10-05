@@ -26,26 +26,43 @@ LABEL maintainer="support@lextudio.com"
 LABEL description="Docker image for running snmpd and snmptrapd (C# SNMP Daemons)"
 LABEL version="1.1"
 
-# Create a small start script that launches both services and handles signals
+# Default: enable snmptrapd (set SNMPTRAPD_ENABLED=0 or false to disable)
+ENV SNMPTRAPD_ENABLED=1
+
+# Create a small start script that launches services and handles signals
 RUN printf '%s\n' '#!/bin/bash' \
   'set -e' \
   '' \
-  '# Start snmptrapd first (listens on UDP 162)' \
-  'dotnet /app/snmptrapd/snmptrapd.dll &' \
-  'SNMPTRAPD_PID=$!' \
+  '# Determine whether to start snmptrapd (defaults to enabled). Set SNMPTRAPD_ENABLED=0 or false to disable.' \
+  'if [ "${SNMPTRAPD_ENABLED:-1}" = "0" ] || [ "${SNMPTRAPD_ENABLED:-1}" = "false" ]; then' \
+  '  echo "snmptrapd disabled by SNMPTRAPD_ENABLED=${SNMPTRAPD_ENABLED}"' \
+  '  START_TRAP=0' \
+  'else' \
+  '  START_TRAP=1' \
+  'fi' \
+  '' \
+  'if [ "$START_TRAP" -eq 1 ]; then' \
+  '  # Start snmptrapd first (listens on UDP 162)' \
+  '  dotnet /app/snmptrapd/snmptrapd.dll &' \
+  '  SNMPTRAPD_PID=$!' \
+  'fi' \
   '' \
   '# Start snmpd (agent) (listens on UDP 161)' \
   'dotnet /app/snmpd/snmpd.dll &' \
   'SNMPD_PID=$!' \
   '' \
-  '# Signal handler: forward SIGTERM/SIGINT to both processes' \
-  '_term() { echo "Stopping services..."; kill -TERM "$SNMPTRAPD_PID" 2>/dev/null; kill -TERM "$SNMPD_PID" 2>/dev/null; }' \
+  '# Signal handler: forward SIGTERM/SIGINT to the running processes' \
+  '_term() { echo "Stopping services..."; if [ "$START_TRAP" -eq 1 ]; then kill -TERM "$SNMPTRAPD_PID" 2>/dev/null; fi; kill -TERM "$SNMPD_PID" 2>/dev/null; }' \
   'trap _term SIGTERM SIGINT' \
   '' \
-  '# Wait for any process to exit and then exit' \
-  'wait -n "$SNMPTRAPD_PID" "$SNMPD_PID"' \
-  'wait "$SNMPTRAPD_PID" 2>/dev/null || true' \
-  'wait "$SNMPD_PID" 2>/dev/null || true' \
+  '# Wait for the appropriate processes to exit and then exit' \
+  'if [ "$START_TRAP" -eq 1 ]; then' \
+  '  wait -n "$SNMPTRAPD_PID" "$SNMPD_PID"' \
+  '  wait "$SNMPTRAPD_PID" 2>/dev/null || true' \
+  '  wait "$SNMPD_PID" 2>/dev/null || true' \
+  'else' \
+  '  wait "$SNMPD_PID" 2>/dev/null || true' \
+  'fi' \
   > /app/start.sh \
   && chmod +x /app/start.sh
 
@@ -54,4 +71,4 @@ ENTRYPOINT ["/app/start.sh"]
 
 # Healthcheck: ensure both dotnet processes for snmpd and snmptrapd are running
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s \
-  CMD pgrep -f snmptrapd.dll >/dev/null || exit 1 && pgrep -f snmpd.dll >/dev/null || exit 1
+  CMD sh -c 'if [ "${SNMPTRAPD_ENABLED:-1}" = "0" ] || [ "${SNMPTRAPD_ENABLED:-1}" = "false" ]; then pgrep -f snmpd.dll >/dev/null || exit 1; else pgrep -f snmptrapd.dll >/dev/null || exit 1 && pgrep -f snmpd.dll >/dev/null || exit 1; fi'
